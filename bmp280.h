@@ -34,7 +34,8 @@
 * @date	2020-01-10
 * @version	v3.3.4
 *
-*/#ifndef __BMP280_H__
+*/
+#ifndef __BMP280_H__
 #define __BMP280_H__
 
 #include "bmp280_defs.h"

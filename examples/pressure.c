@@ -2,18 +2,24 @@
  *  @brief Example shows basic application of configuring and reading pressure.
  */
 
-#include "stdio.h"
-#include "bmp280.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <fcntl.h>
 
-void delay_ms(uint32_t period_ms);
-int8_t i2c_reg_write(uint8_t i2c_addr, uint8_t reg_addr, uint8_t *reg_data, uint16_t length);
-int8_t i2c_reg_read(uint8_t i2c_addr, uint8_t reg_addr, uint8_t *reg_data, uint16_t length);
-int8_t spi_reg_write(uint8_t cs, uint8_t reg_addr, uint8_t *reg_data, uint16_t length);
-int8_t spi_reg_read(uint8_t cs, uint8_t reg_addr, uint8_t *reg_data, uint16_t length);
+#include <linux/i2c-dev.h>
+#include <sys/ioctl.h>
+
+#include "bmp280.h"
+#include "linux_i2c.h"
+
 void print_rslt(const char api_name[], int8_t rslt);
 
-int main(void)
+int main(int argc, char** argv)
 {
+    int fd;
     int8_t rslt;
     struct bmp280_dev bmp;
     struct bmp280_config conf;
@@ -30,18 +36,32 @@ int main(void)
     /* Select the interface mode as I2C */
     bmp.intf = BMP280_I2C_INTF;
 
+    /* Set user pointer for read/write functions */
+    bmp.user_ptr = &fd;
+
     /* Map the I2C read & write function pointer with the functions responsible for I2C bus transfer */
     bmp.read = i2c_reg_read;
     bmp.write = i2c_reg_write;
 
-    /* To enable SPI interface: comment the above 4 lines and uncomment the below 4 lines */
+    /* Open i2c device */
+    if (argc < 2)
+    {
+        fprintf(stderr, "Missing argument for i2c bus.\n");
+        exit(1);
+    }
 
-    /*
-     * bmp.dev_id = 0;
-     * bmp.read = spi_reg_read;
-     * bmp.write = spi_reg_write;
-     * bmp.intf = BMP280_SPI_INTF;
-     */
+    if ((fd = open(argv[1], O_RDWR)) < 0)
+    {
+        fprintf(stderr, "Failed to open i2c bus %s\n", argv[1]);
+        exit(1);
+    }
+    
+    if (ioctl(fd, I2C_SLAVE, bmp.dev_id) < 0)
+    {
+        fprintf(stderr, "Failed to acquire bus access and/or talk to slave.\n");
+        exit(1);
+    }
+    
     rslt = bmp280_init(&bmp);
     print_rslt(" bmp280_init status", rslt);
 
@@ -66,6 +86,7 @@ int main(void)
     /* Always set the power mode after setting the configuration */
     rslt = bmp280_set_power_mode(BMP280_NORMAL_MODE, &bmp);
     print_rslt(" bmp280_set_power_mode status", rslt);
+    bmp.delay_ms(100);
     while (1)
     {
         /* Reading the raw data from sensor */
@@ -79,7 +100,7 @@ int main(void)
 
         /* Getting the compensated pressure as floating point value */
         rslt = bmp280_get_comp_pres_double(&pres, ucomp_data.uncomp_press, &bmp);
-        printf("UP: %ld, P32: %ld, P64: %ld, P64N: %ld, P: %f\r\n",
+        printf("UP: %d, P32: %d, P64: %d, P64N: %d, P: %f\r\n",
                ucomp_data.uncomp_press,
                pres32,
                pres64,
@@ -89,99 +110,6 @@ int main(void)
     }
 
     return 0;
-}
-
-/*!
- *  @brief Function that creates a mandatory delay required in some of the APIs such as "bmg250_soft_reset",
- *      "bmg250_set_foc", "bmg250_perform_self_test"  and so on.
- *
- *  @param[in] period_ms  : the required wait time in milliseconds.
- *  @return void.
- *
- */
-void delay_ms(uint32_t period_ms)
-{
-    /* Implement the delay routine according to the target machine */
-}
-
-/*!
- *  @brief Function for writing the sensor's registers through I2C bus.
- *
- *  @param[in] i2c_addr : sensor I2C address.
- *  @param[in] reg_addr : Register address.
- *  @param[in] reg_data : Pointer to the data buffer whose value is to be written.
- *  @param[in] length   : No of bytes to write.
- *
- *  @return Status of execution
- *  @retval 0 -> Success
- *  @retval >0 -> Failure Info
- *
- */
-int8_t i2c_reg_write(uint8_t i2c_addr, uint8_t reg_addr, uint8_t *reg_data, uint16_t length)
-{
-
-    /* Implement the I2C write routine according to the target machine. */
-    return -1;
-}
-
-/*!
- *  @brief Function for reading the sensor's registers through I2C bus.
- *
- *  @param[in] i2c_addr : Sensor I2C address.
- *  @param[in] reg_addr : Register address.
- *  @param[out] reg_data    : Pointer to the data buffer to store the read data.
- *  @param[in] length   : No of bytes to read.
- *
- *  @return Status of execution
- *  @retval 0 -> Success
- *  @retval >0 -> Failure Info
- *
- */
-int8_t i2c_reg_read(uint8_t i2c_addr, uint8_t reg_addr, uint8_t *reg_data, uint16_t length)
-{
-
-    /* Implement the I2C read routine according to the target machine. */
-    return -1;
-}
-
-/*!
- *  @brief Function for writing the sensor's registers through SPI bus.
- *
- *  @param[in] cs           : Chip select to enable the sensor.
- *  @param[in] reg_addr     : Register address.
- *  @param[in] reg_data : Pointer to the data buffer whose data has to be written.
- *  @param[in] length       : No of bytes to write.
- *
- *  @return Status of execution
- *  @retval 0 -> Success
- *  @retval >0 -> Failure Info
- *
- */
-int8_t spi_reg_write(uint8_t cs, uint8_t reg_addr, uint8_t *reg_data, uint16_t length)
-{
-
-    /* Implement the SPI write routine according to the target machine. */
-    return -1;
-}
-
-/*!
- *  @brief Function for reading the sensor's registers through SPI bus.
- *
- *  @param[in] cs       : Chip select to enable the sensor.
- *  @param[in] reg_addr : Register address.
- *  @param[out] reg_data    : Pointer to the data buffer to store the read data.
- *  @param[in] length   : No of bytes to read.
- *
- *  @return Status of execution
- *  @retval 0 -> Success
- *  @retval >0 -> Failure Info
- *
- */
-int8_t spi_reg_read(uint8_t cs, uint8_t reg_addr, uint8_t *reg_data, uint16_t length)
-{
-
-    /* Implement the SPI read routine according to the target machine. */
-    return -1;
 }
 
 /*!
